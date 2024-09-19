@@ -16,7 +16,7 @@ local jumplist_buf
 local ns = vim.api.nvim_create_namespace("")
 local config
 local default_config = {
-    jumplist_position = "right",
+    jumplist_position = "below",
     height = 15,
     width = 50,
     colors = {
