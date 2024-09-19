@@ -1,4 +1,4 @@
-local util = require("snapshot-analyser.util")
+local util = require("csv-analyser.util")
 
 local M = {}
 

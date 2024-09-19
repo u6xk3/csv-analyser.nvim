@@ -1,6 +1,6 @@
-local util = require("snapshot-analyser.util")
-local filter = require("snapshot-analyser.filter")
-local color_util = require("snapshot-analyser.color")
+local util = require("csv-analyser.util")
+local filter = require("csv-analyser.filter")
+local color_util = require("csv-analyser.color")
 
 local M = {}
 
