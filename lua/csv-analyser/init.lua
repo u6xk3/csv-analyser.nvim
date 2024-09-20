@@ -16,6 +16,8 @@ local main_buf
 local jumplist_buf
 local ns = vim.api.nvim_create_namespace("")
 local config
+local setup_called = false
+
 local default_config = {
     jumplist_position = "below",
     height = 15,
@@ -478,6 +480,8 @@ function M.setup(conf)
         filters = config.filters,
         index = index
     })
+
+    setup_called = true
 end
 
 local previous_id = nil
@@ -558,6 +562,13 @@ function M.jumplist_toggle()
 end
 
 function M.analyser_start()
+    if not setup_called then
+        print("csv-analyser.setup() must be called before usage")
+        return
+    end
+
+    if main_buf ~= nil then return end
+
     M.parse()
     main_buf = vim.api.nvim_create_buf(false, true)
     jumplist_buf = vim.api.nvim_create_buf(false, true)
@@ -589,31 +600,33 @@ function M.analyser_start()
 end
 
 function M.analyser_stop()
-    M.jumplist_close()
-    vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), og_buf)
+    if main_buf ~= nil then
+        M.jumplist_close()
+        vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), og_buf)
 
-    vim.api.nvim_buf_delete(main_buf, {})
-    vim.api.nvim_buf_delete(jumplist_buf, {})
+        vim.api.nvim_buf_delete(main_buf, {})
+        vim.api.nvim_buf_delete(jumplist_buf, {})
 
-    vim.api.nvim_del_user_command("CsvHide")
-    vim.api.nvim_del_user_command("CsvShow")
-    vim.api.nvim_del_user_command("CsvHideCol")
-    vim.api.nvim_del_user_command("CsvShowCol")
-    vim.api.nvim_del_user_command("CsvColor")
-    vim.api.nvim_del_user_command("CsvClear")
-    vim.api.nvim_del_user_command("CsvAdd")
-    vim.api.nvim_del_user_command("CsvRemove")
+        vim.api.nvim_del_user_command("CsvHide")
+        vim.api.nvim_del_user_command("CsvShow")
+        vim.api.nvim_del_user_command("CsvHideCol")
+        vim.api.nvim_del_user_command("CsvShowCol")
+        vim.api.nvim_del_user_command("CsvColor")
+        vim.api.nvim_del_user_command("CsvClear")
+        vim.api.nvim_del_user_command("CsvAdd")
+        vim.api.nvim_del_user_command("CsvRemove")
 
-    header = nil
-    index = {}
-    entries = {}
-    hidden_entries = {}
-    jumplist_entries = {}
-    hidden_columns = {}
-    csv_content = nil
-    og_buf = nil
-    main_buf = nil
-    jumplist_buf = nil
+        header = nil
+        index = {}
+        entries = {}
+        hidden_entries = {}
+        jumplist_entries = {}
+        hidden_columns = {}
+        csv_content = nil
+        og_buf = nil
+        main_buf = nil
+        jumplist_buf = nil
+    end
 end
 
 function M.parse()
