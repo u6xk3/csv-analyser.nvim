@@ -8,6 +8,16 @@ function M.setup(conf)
     config = conf
 end
 
+local notequal_obj = {}
+function notequal_obj.create(prop, val)
+    return {
+        evaluate = function (data)
+            if data.fields[config.index[prop]] == nil then return false end
+            return data.fields[config.index[prop]] ~= val
+        end
+    }
+end
+
 local equal_obj = {}
 function equal_obj.create(prop, val)
     return {
@@ -68,6 +78,14 @@ function M.parse_args(fields)
                 return
             end
             table.insert(equal, equal_obj.create(fields[i - 1], fields[i + 1]))
+
+        elseif fields[i] == "!=" then
+            if fields[i - 1] == nil or fields[i + 1] == nil then
+                print("invalid syntax")
+                return
+            end
+
+            table.insert(equal, notequal_obj.create(fields[i - 1], fields[i + 1]))
 
         elseif fields[i] == "*=" then
             if fields[i - 1] == nil or fields[i + 1] == nil then

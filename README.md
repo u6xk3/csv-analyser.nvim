@@ -76,7 +76,7 @@ In order to use the jumplist, the keybinding `<leader>j` is defined to open/togg
 If the current window is the jumplist, it will toggle the jumplist.  
 If the current window is the csv buffer, it will open the jumplist.  
 
-After doing the analysis, the analyser view can be close using `csv-analyser.analyser_stop()`.  
+After doing the analysis, the analyser view can be closed using `csv-analyser.analyser_stop()`.  
 This will reset all of the variables and open the original csv file.  
 
 The possible configuration options are:  
@@ -127,7 +127,7 @@ The available commands are:
 
 <filter string>     Is a string matching the pattern "<column name> <compare operator> <value> and/or..."  
                     where <column name> is a name contained in the header row
-                          <compare operator> is "==" for euqality or "*=" for patter matching using lua patterns (e.g. gmatch)
+                          <compare operator> is "==" for equality, "!=" for not equal or "*=" for patter matching using lua patterns (e.g. gmatch)
                           <value> is the value of the column on the rows to be filtered. This value should not contain spaces
                     possible keywords to combine comparisons are "and" aswell as "or" where "and" gets evaluated first.
                     currently, "()" cannot be used to group change the evaluation order.
