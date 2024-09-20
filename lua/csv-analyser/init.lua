@@ -582,7 +582,9 @@ function M.analyser_start()
     vim.api.nvim_set_option_value("modifiable", false, { buf = main_buf })
     vim.api.nvim_set_option_value("modifiable", false, { buf = jumplist_buf })
 
-    vim.api.nvim_set_current_buf(main_buf)
+    vim.api.nvim_win_set_hl_ns(0, ns)
+    vim.api.nvim_win_set_buf(0, main_buf)
+
     vim.api.nvim_buf_set_keymap(jumplist_buf, "n", "<leader>j", '', { callback=M.jumplist_toggle })
     vim.api.nvim_buf_set_keymap(main_buf, "n", "<leader>j", '', { callback=M.jumplist_open })
     vim.api.nvim_buf_set_keymap(jumplist_buf, "n", "<CR>", '', {
