@@ -1,5 +1,17 @@
 local M = {}
 
+function M.buf_temp_modifiable(buf, func)
+    local result
+    if vim.api.nvim_get_option_value("modifiable", { buf = buf }) == false then
+        vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+        result = func()
+        vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    else
+        result = func()
+    end
+    return result
+end
+
 function M.split_string(str, delim)
     local fields = {}
 
@@ -28,6 +40,14 @@ end
 function M.array_contains(tbl, val)
     for key, tbl_val in ipairs(tbl) do
         if tbl_val == val then return key end
+    end
+
+    return false
+end
+
+function M.array_contains_key(tbl, key)
+    for tbl_key, _ in pairs(tbl) do
+        if tbl_key == key then return true end
     end
 
     return false
