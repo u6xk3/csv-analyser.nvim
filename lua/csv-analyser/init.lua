@@ -14,9 +14,9 @@ local csv_content
 local og_buf
 local main_buf
 local jumplist_buf
-local ns = vim.api.nvim_create_namespace("")
 local config
 local setup_called = false
+local ns
 
 local default_config = {
     jumplist_position = "below",
@@ -73,6 +73,7 @@ function data_obj.create(line, buf, line_nr, fields)
         line = line,
         hidden = false,
         fields = fields,
+        index = line_nr,
         highlight = {
             group = nil,
             ids = {}
@@ -205,7 +206,7 @@ local function add_highlight(user_cmd)
                 if obj.highlight.ids[buf] ~= nil then
                     vim.api.nvim_buf_del_extmark(buf, ns, obj.highlight.ids[buf])
                 end
-                obj.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, obj.line_nrs[buf], 0, { end_col = util.buf_get_line_length(buf, obj.line_nrs[buf]), hl_group = color, strict = false })
+                obj.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, obj.line_nrs[buf], 0, { end_col = util.buf_get_line_length(buf, obj.line_nrs[buf]), hl_group = color, strict = true })
                 obj.highlight.group = color
             end
             amount = amount + 1
@@ -360,6 +361,10 @@ local function hide_entry(user_cmd)
         end
     end
 
+    table.sort(hidden_entries, function (a, b)
+        return a.index < b.index
+    end)
+
     fix_line_nrs(entries)
     print(amount .. " Entries hidden")
 end
@@ -378,15 +383,13 @@ local function show_entry(user_cmd)
 
     fix_line_nrs(entries)
 
-    --table.sort(hidden_entries, function (a, b)
-    --    return a.line_nr < b.line_nr
-    --end)
-
     local i = 1
-    while i  <= #hidden_entries do
+    while i <= #hidden_entries do
         if hidden_entries[i].hidden == false then
             for _, buf in ipairs(hidden_entries[i].buffers) do
-                buf_temp_modifiable(buf, function() vim.api.nvim_buf_set_lines(buf, hidden_entries[i].line_nrs[buf], hidden_entries[i].line_nrs[buf], true, { create_line(hidden_entries[i].fields, config.spacing) }) end)
+                buf_temp_modifiable(buf, function()
+                    vim.api.nvim_buf_set_lines(buf, hidden_entries[i].line_nrs[buf], hidden_entries[i].line_nrs[buf], true, { create_line(hidden_entries[i].fields, config.spacing) })
+                end)
                 if hidden_entries[i].highlight.group ~= nil then
                     hidden_entries[i].highlight.ids[buf] =
                     vim.api.nvim_buf_set_extmark(buf, ns, hidden_entries[i].line_nrs[buf], 0, {
@@ -454,7 +457,7 @@ local function jumplist_add(user_cmd)
     end
 
     table.sort(jumplist_entries, function (a, b)
-        return a.line_nrs[main_buf] < b.line_nrs[main_buf]
+        return a.index < b.index
     end)
 
     buf_fix_line_nrs(jumplist_buf, jumplist_entries)
@@ -569,6 +572,7 @@ function M.analyser_start()
 
     if main_buf ~= nil then return end
 
+    ns = vim.api.nvim_create_namespace("")
     M.parse()
     main_buf = vim.api.nvim_create_buf(false, true)
     jumplist_buf = vim.api.nvim_create_buf(false, true)
