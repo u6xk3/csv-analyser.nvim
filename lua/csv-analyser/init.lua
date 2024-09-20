@@ -11,6 +11,7 @@ local hidden_entries = {}
 local jumplist_entries = {}
 local hidden_columns = {}
 local csv_content
+local og_buf
 local main_buf
 local jumplist_buf
 local ns = vim.api.nvim_create_namespace("")
@@ -556,7 +557,7 @@ function M.jumplist_toggle()
     end
 end
 
-function M.analyse()
+function M.analyser_start()
     M.parse()
     main_buf = vim.api.nvim_create_buf(false, true)
     jumplist_buf = vim.api.nvim_create_buf(false, true)
@@ -587,9 +588,37 @@ function M.analyse()
     vim.api.nvim_create_user_command("CsvRemove", jumplist_remove, { nargs = '?' })
 end
 
+function M.analyser_stop()
+    M.jumplist_close()
+    vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), og_buf)
+
+    vim.api.nvim_buf_delete(main_buf, {})
+    vim.api.nvim_buf_delete(jumplist_buf, {})
+
+    vim.api.nvim_del_user_command("CsvHide")
+    vim.api.nvim_del_user_command("CsvShow")
+    vim.api.nvim_del_user_command("CsvHideCol")
+    vim.api.nvim_del_user_command("CsvShowCol")
+    vim.api.nvim_del_user_command("CsvColor")
+    vim.api.nvim_del_user_command("CsvClear")
+    vim.api.nvim_del_user_command("CsvAdd")
+    vim.api.nvim_del_user_command("CsvRemove")
+
+    header = nil
+    index = {}
+    entries = {}
+    hidden_entries = {}
+    jumplist_entries = {}
+    hidden_columns = {}
+    csv_content = nil
+    og_buf = nil
+    main_buf = nil
+    jumplist_buf = nil
+end
+
 function M.parse()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local buf = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
+    og_buf = vim.api.nvim_get_current_buf()
+    local buf = vim.api.nvim_buf_get_lines(og_buf, 0, -1, true)
 
     header = util.split_string(buf[1], ";")
 

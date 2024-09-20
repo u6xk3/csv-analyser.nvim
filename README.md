@@ -61,19 +61,23 @@ csv.setup({
     }
 })
 
-vim.keymap.set("n", "<leader>r", csv.analyse)
+vim.keymap.set("n", "<leader>r", csv.analyser_start)
+vim.keymap.set("n", "<leader>c", csv.analyser_stop)
 ```
 Except for the filters key, the table visible above represents the default configuration  
 if setup is called without a table.  
 
-For any of the commands and shortcuts to be usable, the `csv-analyser.analyse()` method  
+For any of the commands and shortcuts to be usable, the `csv-analyser.analyser_start()` method  
 has to be called. In the example config this is mapped to `<leader>r`.  
-calling `csv-analyser.analyse()` will create two temporary buffers, one with the reformatted  
+calling `csv-analyser.analyser_start()` will create two temporary buffers, one with the reformatted  
 csv content and one as the jumplist.  
 
 In order to use the jumplist, the keybinding `<leader>j` is defined to open/toggle it.  
 If the current window is the jumplist, it will toggle the jumplist.  
 If the current window is the csv buffer, it will open the jumplist.  
+
+After doing the analysis, the analyser view can be close using `csv-analyser.analyser_stop()`.  
+This will reset all of the variables and open the original csv file.  
 
 The possible configuration options are:  
 ```
