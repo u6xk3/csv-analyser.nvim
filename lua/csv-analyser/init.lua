@@ -147,6 +147,18 @@ local function check_color(color)
     return checked
 end
 
+local function buf_temp_modifiable(buf, func)
+    local result
+    if vim.api.nvim_get_option_value("modifiable", { buf = buf }) == false then
+        vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+        result = func()
+        vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    else
+        result = func()
+    end
+    return result
+end
+
 local function remove_highlight(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
 
@@ -230,8 +242,8 @@ end
 
 local function draw_data(header_row, data)
     for buf, buffer_content in pairs(get_buffers_from_data(data)) do
-        vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) })
-        vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffer_content)
+        buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
+        buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffer_content) end)
     end
     reapply_highlights(data)
 end
@@ -240,8 +252,8 @@ local function buf_draw_data(buf, header_row, data)
     local buffers = get_buffers_from_data(data)
     if buffers[buf] == nil then return false end
 
-    vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) })
-    vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffers[buf])
+    buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
+    buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffers[buf]) end)
 
     buf_reapply_highlights(buf, data)
 end
@@ -337,7 +349,7 @@ local function hide_entry(user_cmd)
                 entries[i].hidden = true
                 table.insert(hidden_entries, entries[i])
                 for _, buf in ipairs(entries[i].buffers) do
-                    vim.api.nvim_buf_set_lines(buf, entries[i].line_nrs[buf], entries[i].line_nrs[buf] + 1, true, {})
+                    buf_temp_modifiable(buf, function() vim.api.nvim_buf_set_lines(buf, entries[i].line_nrs[buf], entries[i].line_nrs[buf] + 1, true, {}) end)
                     entries[i].line_nrs[buf] = nil
                 end
                 amount = amount + 1
@@ -371,7 +383,7 @@ local function show_entry(user_cmd)
     while i  <= #hidden_entries do
         if hidden_entries[i].hidden == false then
             for _, buf in ipairs(hidden_entries[i].buffers) do
-                vim.api.nvim_buf_set_lines(buf, hidden_entries[i].line_nrs[buf], hidden_entries[i].line_nrs[buf], true, { create_line(hidden_entries[i].fields, config.spacing) })
+                buf_temp_modifiable(buf, function() vim.api.nvim_buf_set_lines(buf, hidden_entries[i].line_nrs[buf], hidden_entries[i].line_nrs[buf], true, { create_line(hidden_entries[i].fields, config.spacing) }) end)
                 if hidden_entries[i].highlight.group ~= nil then
                     hidden_entries[i].highlight.ids[buf] =
                     vim.api.nvim_buf_set_extmark(buf, ns, hidden_entries[i].line_nrs[buf], 0, {
@@ -397,7 +409,9 @@ local function jumplist_remove(user_cmd)
     local amount = 0
     for i = #jumplist_entries, 1, -1 do
         if eval.evaluate(jumplist_entries[i]) then
-            vim.api.nvim_buf_set_lines(jumplist_buf, jumplist_entries[i].line_nrs[jumplist_buf], jumplist_entries[i].line_nrs[jumplist_buf] + 1, true, {})
+            buf_temp_modifiable(jumplist_buf, function() 
+                vim.api.nvim_buf_set_lines(jumplist_buf, jumplist_entries[i].line_nrs[jumplist_buf], jumplist_entries[i].line_nrs[jumplist_buf] + 1, true, {})
+            end)
             jumplist_entries[i].line_nrs[jumplist_buf] = nil
             local j_buf_key = util.array_contains(jumplist_entries[i].buffers, jumplist_buf)
             if type(j_buf_key) == "number" then
@@ -546,6 +560,12 @@ function M.analyse()
     M.parse()
     main_buf = vim.api.nvim_create_buf(false, true)
     jumplist_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(main_buf, "CSV")
+    vim.api.nvim_buf_set_name(jumplist_buf, "Jump List")
+
+    vim.api.nvim_set_option_value("modifiable", false, { buf = main_buf })
+    vim.api.nvim_set_option_value("modifiable", false, { buf = jumplist_buf })
+
     vim.api.nvim_set_current_buf(main_buf)
     vim.api.nvim_buf_set_keymap(jumplist_buf, "n", "<leader>j", '', { callback=M.jumplist_toggle })
     vim.api.nvim_buf_set_keymap(main_buf, "n", "<leader>j", '', { callback=M.jumplist_open })
