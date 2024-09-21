@@ -2,6 +2,7 @@ local util = require("csv-analyser.util")
 local filter = require("csv-analyser.filter")
 local color_util = require("csv-analyser.color")
 local jl = require("csv-analyser.jumplist")
+local hl = require("csv-analyser.highlight")
 
 local M = {}
 
@@ -15,7 +16,6 @@ local og_buf
 local main_buf
 local config
 local setup_called = false
-local ns
 
 local default_config = {
     jumplist_position = "below",
@@ -32,15 +32,6 @@ local default_config = {
     delimiter = ";",
     spacing = "  ",
 }
-
-local function create_hl_groups(colors)
-    for key, color in pairs(colors) do
-        vim.api.nvim_set_hl(ns, key, {
-            fg = color.fg,
-            bg = color.bg
-        })
-    end
-end
 
 local function get_entry_by_line_nr(data, buf, line_nr)
     for _, entry in ipairs(data) do
@@ -150,40 +141,20 @@ local function fix_line_nrs(data)
     end
 end
 
-local function check_color(color)
-    local checked = nil
-    for key, _ in pairs(config.colors) do
-        if key == color then checked = color end
-    end
-    return checked
-end
-
 local function remove_highlight(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
 
     local eval = filter.parse_args(fields)
     if eval == nil then return end
 
-    local amount = 0
-    for _, obj in ipairs(entries) do
-        if not obj.hidden and eval.evaluate(obj) then
-            for buf, _ in pairs(obj.locations) do
-                if obj.highlight.ids[buf] ~= nil then
-                    vim.api.nvim_buf_del_extmark(buf, ns, obj.highlight.ids[buf])
-                    obj.highlight.ids[buf] = nil
-                end
-            end
-            obj.highlight.group = nil
-            amount = amount + 1
-        end
-    end
+    local amount = hl.remove_by_filter(eval)
 
     print(amount .. " Lines Cleared")
 end
 
 local function add_highlight(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
-    local color = check_color(fields[#fields])
+    local color = hl.check_hl_group(fields[#fields])
 
     if color == nil then
         print("Invalid color, last argument must be color")
@@ -197,13 +168,7 @@ local function add_highlight(user_cmd)
     local amount = 0
     for _, obj in ipairs(entries) do
         if not obj.hidden and eval.evaluate(obj) then
-            for buf, line in pairs(obj.locations) do
-                if obj.highlight.ids[buf] ~= nil then
-                    vim.api.nvim_buf_del_extmark(buf, ns, obj.highlight.ids[buf])
-                end
-                obj.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, { end_col = util.buf_get_line_length(buf, line), hl_group = color, strict = true })
-                obj.highlight.group = color
-            end
+            hl.add(obj, color)
             amount = amount + 1
         end
     end
@@ -211,40 +176,12 @@ local function add_highlight(user_cmd)
     print(amount .. " Lines Colored")
 end
 
-local function reapply_highlights(data)
-    for _, obj in ipairs(data) do
-        if not obj.hidden then
-            for buf, line in pairs(obj.locations) do
-                if obj.highlight.group ~= nil then
-                    obj.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
-                        end_col = util.buf_get_line_length(buf, line),
-                        hl_group = obj.highlight.group,
-                        strict = false
-                    })
-                end
-            end
-        end
-    end
-end
-
-local function buf_reapply_highlights(buf, data)
-    for _, obj in ipairs(data) do
-        if obj.locations[buf] ~= nil and obj.highlight.group ~= nil and not obj.hidden then
-            obj.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, obj.locations[buf], 0, {
-                end_col = util.buf_get_line_length(buf, obj.locations[buf]),
-                hl_group = obj.highlight.group,
-                strict = false
-            })
-        end
-    end
-end
-
 local function draw_data(header_row, data)
     for buf, buffer_content in pairs(get_buffers_from_data(data)) do
         util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
         util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffer_content) end)
     end
-    reapply_highlights(data)
+    hl.reapply()
 end
 
 local function buf_draw_data(buf, header_row, data)
@@ -254,7 +191,7 @@ local function buf_draw_data(buf, header_row, data)
     util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
     util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffers[buf]) end)
 
-    buf_reapply_highlights(buf, data)
+    hl.buf_reapply(buf)
 end
 
 
@@ -347,10 +284,9 @@ local function hide_entry(user_cmd)
             if eval.evaluate(entries[i]) then
                 entries[i].hidden = true
                 table.insert(hidden_entries, entries[i])
-                for buf, line in ipairs(entries[i].locations) do
-                    util.buf_temp_modifiable(buf, function() vim.api.nvim_buf_set_lines(buf, line, line + 1, true, {}) end)
-                    entries[i].locations[buf] = "hidden"
-                end
+                local line = entries[i].locations[main_buf]
+                util.buf_temp_modifiable(main_buf, function() vim.api.nvim_buf_set_lines(main_buf, line, line + 1, true, {}) end)
+                entries[i].locations[main_buf] = "hidden"
                 amount = amount + 1
             end
         end
@@ -381,18 +317,12 @@ local function show_entry(user_cmd)
     local i = 1
     while i <= #hidden_entries do
         if hidden_entries[i].hidden == false then
-            for buf, line in pairs(hidden_entries[i].locations) do
-                util.buf_temp_modifiable(buf, function()
-                    vim.api.nvim_buf_set_lines(buf, line, line, true, { create_line(hidden_entries[i].fields, config.spacing) })
-                end)
-                if hidden_entries[i].highlight.group ~= nil then
-                    hidden_entries[i].highlight.ids[buf] =
-                    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
-                        end_col = util.buf_get_line_length(buf, line),
-                        hl_group = hidden_entries[i].highlight.group,
-                        strict = false
-                    })
-                end
+            local line = hidden_entries[i].locations[main_buf]
+            util.buf_temp_modifiable(main_buf, function()
+                vim.api.nvim_buf_set_lines(main_buf, line, line, true, { create_line(hidden_entries[i].fields, config.spacing) })
+            end)
+            if hidden_entries[i].highlight.group ~= nil then
+                hl.add(hidden_entries[i], hidden_entries[i].highlight.group)
             end
             table.remove(hidden_entries, i)
             i = i - 1
@@ -464,6 +394,7 @@ local previous_id = nil
 function M.jumplist_go()
     local win = vim.api.nvim_get_current_win()
     local row = vim.api.nvim_win_get_cursor(win)[1]
+    local ns = hl.get_namespace()
 
     if previous_id ~= nil then
         vim.api.nvim_buf_del_extmark(main_buf, ns, previous_id)
@@ -513,15 +444,17 @@ function M.analyser_start()
 
     if main_buf ~= nil then return end
 
-    ns = vim.api.nvim_create_namespace("")
     M.parse()
+
     main_buf = vim.api.nvim_create_buf(false, true)
+
     jl.setup({ position = config.jumplist_position })
+    hl.setup(config.colors)
+    vim.api.nvim_win_set_hl_ns(0, hl.get_namespace())
 
     vim.api.nvim_buf_set_name(main_buf, "CSV")
     vim.api.nvim_set_option_value("modifiable", false, { buf = main_buf })
 
-    vim.api.nvim_win_set_hl_ns(0, ns)
     vim.api.nvim_win_set_buf(0, main_buf)
 
     vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<leader>j", '', { callback=jl.toggle })
@@ -585,10 +518,6 @@ function M.parse()
     table.remove(buf, 1)
 
     csv_content = buf
-
-    create_hl_groups(config.colors)
-
-    vim.api.nvim_set_hl_ns(ns)
 end
 
 return M
