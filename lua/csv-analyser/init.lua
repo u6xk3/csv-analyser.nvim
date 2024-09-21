@@ -3,12 +3,12 @@ local filter = require("csv-analyser.filter")
 local color_util = require("csv-analyser.color")
 local jl = require("csv-analyser.jumplist")
 local hl = require("csv-analyser.highlight")
+local csv = require("csv-analyser.csv")
 
 local M = {}
 
 local header
 local index = {}
-local entries = {}
 local hidden_entries = {}
 local hidden_columns = {}
 local csv_content
@@ -41,49 +41,7 @@ local function get_entry_by_line_nr(data, buf, line_nr)
     end
 end
 
-local function create_line(fields, spacing)
-    local str = ""
-    local hidden = false
-    for i, field in ipairs(fields) do
-        for _, col in ipairs(hidden_columns) do
-            if i == col then hidden = true end
-        end
-
-        if not hidden then
-            if str == "" then str = field
-            else str = str .. spacing .. field end
-        end
-        hidden = false
-    end
-    return str
-end
-
-local data_obj = {}
-function data_obj.create(line, buf, line_nr, fields)
-    local buffers = {}
-    local locations = {}
-    table.insert(buffers, buf)
-    locations[buf] = line_nr
-
-    local data = {
-        locations = locations,
-        buffers = buffers,
-        line = line,
-        hidden = false,
-        fields = fields,
-        index = line_nr,
-        highlight = {
-            group = nil,
-            ids = {}
-        }
-    }
-
-    return data
-end
-
 local function create_data_objs(lines, header_row)
-    local objs = {}
-
     for nr, line in ipairs(lines) do
         local fields = util.split_string(line, ";")
         local values = {}
@@ -97,10 +55,8 @@ local function create_data_objs(lines, header_row)
                 --values[header_row[i]] = table.concat(fields, config.spacing, i)
             end
         end
-        table.insert(objs, data_obj.create(line, main_buf, nr, values))
+        csv.create_entry(main_buf, line, nr, values)
     end
-
-    return objs
 end
 
 local function get_buffers_from_data(data)
@@ -109,36 +65,11 @@ local function get_buffers_from_data(data)
         if not obj.hidden then
             for buf, _ in pairs(obj.locations) do
                 if buffers[buf] == nil then buffers[buf] = {} end
-                table.insert(buffers[buf], create_line(obj.fields, config.spacing))
+                table.insert(buffers[buf], csv.create_line(obj.fields, config.spacing, hidden_columns))
             end
         end
     end
     return buffers
-end
-
-local function buf_fix_line_nrs(buf, data)
-    local last_nr = 0
-    for _, obj in ipairs(data) do
-        if not obj.hidden then
-            if util.array_contains_key(obj.locations, buf) then
-                obj.locations[buf] = last_nr + 1
-                last_nr = last_nr + 1
-            end
-        end
-    end
-end
-
-local function fix_line_nrs(data)
-    local last_nr_by_buffer = {}
-    for _, obj in ipairs(data) do
-        if not obj.hidden then
-            for buf, _ in pairs(obj.locations) do
-                if last_nr_by_buffer[buf] == nil then last_nr_by_buffer[buf] = 0 end
-                obj.locations[buf] = last_nr_by_buffer[buf] + 1
-                last_nr_by_buffer[buf] = last_nr_by_buffer[buf] + 1
-            end
-        end
-    end
 end
 
 local function remove_highlight(user_cmd)
@@ -166,7 +97,7 @@ local function add_highlight(user_cmd)
     if eval == nil then return end
 
     local amount = 0
-    for _, obj in ipairs(entries) do
+    for _, obj in ipairs(csv.get_entries()) do
         if not obj.hidden and eval.evaluate(obj) then
             hl.add(obj, color)
             amount = amount + 1
@@ -178,7 +109,7 @@ end
 
 local function draw_data(header_row, data)
     for buf, buffer_content in pairs(get_buffers_from_data(data)) do
-        util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
+        util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { csv.create_line(header_row, config.spacing, hidden_columns) }) end)
         util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffer_content) end)
     end
     hl.reapply()
@@ -188,7 +119,7 @@ local function buf_draw_data(buf, header_row, data)
     local buffers = get_buffers_from_data(data)
     if buffers[buf] == nil then return false end
 
-    util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { create_line(header_row, config.spacing) }) end)
+    util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { csv.create_line(header_row, config.spacing, hidden_columns) }) end)
     util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffers[buf]) end)
 
     hl.buf_reapply(buf)
@@ -227,7 +158,7 @@ local function hide_column(user_cmd)
 
     util.extend_table(hidden_columns, cols)
 
-    draw_data(header, entries)
+    draw_data(header, csv.get_entries())
 
     if cursor_main ~= nil then vim.api.nvim_win_set_cursor(win_main, cursor_main) end
     if cursor_jl ~= nil then vim.api.nvim_win_set_cursor(win_jl, cursor_jl) end
@@ -266,7 +197,7 @@ local function show_column(user_cmd)
         i = i + 1
     end
 
-    draw_data(header, entries)
+    draw_data(header, csv.get_entries())
 
     if cursor_main ~= nil then vim.api.nvim_win_set_cursor(win_main, cursor_main) end
     if cursor_jl ~= nil then vim.api.nvim_win_set_cursor(win_jl, cursor_jl) end
@@ -277,6 +208,7 @@ end
 local function hide_entry(user_cmd)
     local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
     if eval == nil then return end
+    local entries = csv.get_entries()
 
     local amount = 0
     for i = #entries, 1, -1 do
@@ -296,7 +228,7 @@ local function hide_entry(user_cmd)
         return a.index < b.index
     end)
 
-    fix_line_nrs(entries)
+    csv.fix_line_nrs()
     print(amount .. " Entries hidden")
 end
 
@@ -312,14 +244,14 @@ local function show_entry(user_cmd)
         end
     end
 
-    fix_line_nrs(entries)
+    csv.fix_line_nrs()
 
     local i = 1
     while i <= #hidden_entries do
         if hidden_entries[i].hidden == false then
             local line = hidden_entries[i].locations[main_buf]
             util.buf_temp_modifiable(main_buf, function()
-                vim.api.nvim_buf_set_lines(main_buf, line, line, true, { create_line(hidden_entries[i].fields, config.spacing) })
+                vim.api.nvim_buf_set_lines(main_buf, line, line, true, { csv.create_line(hidden_entries[i].fields, config.spacing, hidden_columns) })
             end)
             if hidden_entries[i].highlight.group ~= nil then
                 hl.add(hidden_entries[i], hidden_entries[i].highlight.group)
@@ -344,7 +276,7 @@ local function jumplist_remove(user_cmd)
         end)
     end
 
-    buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
+    csv.buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
 
     print(#lines .. " Lines removed from the jumplist")
 end
@@ -354,7 +286,7 @@ local function jumplist_add(user_cmd)
     if eval == nil then return end
 
     local amount = 0
-    for _, entry in ipairs(entries) do
+    for _, entry in ipairs(csv.get_entries()) do
         if not entry.hidden and not jl.contains_entry(entry) then
             if eval.evaluate(entry) then
                 jl.add_entry(entry)
@@ -363,7 +295,7 @@ local function jumplist_add(user_cmd)
         end
     end
 
-    buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
+    csv.buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
 
     buf_draw_data(jl.get_buffer(), header, jl.get_entries())
     print(amount .. " Lines added to the jumplist")
@@ -464,9 +396,9 @@ function M.analyser_start()
         callback=M.jumplist_go
     })
 
-    entries = create_data_objs(csv_content, header)
+    create_data_objs(csv_content, header)
 
-    draw_data(header, entries)
+    draw_data(header, csv.get_entries())
     vim.api.nvim_create_user_command("CsvHide", hide_entry, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvShow", show_entry, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvHideCol", hide_column, { nargs = '?' })
@@ -496,7 +428,6 @@ function M.analyser_stop()
 
         header = nil
         index = {}
-        entries = {}
         hidden_entries = {}
         hidden_columns = {}
         csv_content = nil
