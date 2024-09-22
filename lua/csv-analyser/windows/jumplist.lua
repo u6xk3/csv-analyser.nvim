@@ -1,4 +1,5 @@
 local util = require("csv-analyser.util")
+local el = require("csv-analyser.entry-list")
 
 local M = {}
 
@@ -47,26 +48,7 @@ end
 
 function M.add_entry(entry)
     entry.locations[buffer] = "fix"
-
-    if #entries == 0 then
-        table.insert(entries, 1, entry)
-        return
-    end
-
-    if entry.index < entries[1].index then
-        table.insert(entries, 1, entry)
-        return
-    elseif entry.index > entries[#entries].index then
-        table.insert(entries, #entries + 1, entry)
-        return
-    end
-
-    for i = 1, #entries do
-        if entries[i].index > entry.index then
-            table.insert(entries, i , entry)
-            break
-        end
-    end
+    el.insert(entries, entry)
 end
 
 function M.remove_entries(condition)

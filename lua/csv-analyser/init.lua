@@ -1,7 +1,8 @@
 local util = require("csv-analyser.util")
 local filter = require("csv-analyser.filter")
 local color_util = require("csv-analyser.color")
-local jl = require("csv-analyser.jumplist")
+local jl = require("csv-analyser.windows.jumplist")
+local main = require("csv-analyser.windows.main")
 local hl = require("csv-analyser.highlight")
 local csv = require("csv-analyser.csv")
 
@@ -11,11 +12,11 @@ local header
 local index = {}
 local hidden_entries = {}
 local hidden_columns = {}
-local csv_content
 local og_buf
 local main_buf
 local config
 local setup_called = false
+local analyser_started = false
 
 local default_config = {
     jumplist_position = "below",
@@ -128,141 +129,24 @@ end
 
 local function hide_column(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
-    local win_main = vim.fn.bufwinid(main_buf)
-    local win_jl = vim.fn.bufwinid(jl.get_buffer())
-
-    local cursor_main
-    local cursor_jl
-    if win_main ~= -1 then cursor_main = vim.api.nvim_win_get_cursor(win_main) end
-    if win_jl ~= -1 then cursor_jl = vim.api.nvim_win_get_cursor(win_jl) end
-
-    local cols = {}
-    for _, field in ipairs(fields) do
-        if index[field] == nil then
-            print("Invalid Column " .. field)
-        else
-            table.insert(cols, index[field])
-        end
-    end
-
-    if #cols == 0 then return end
-
-    for _, hidden in ipairs(hidden_columns) do
-        for _, col in ipairs(cols) do
-            if hidden == col then
-                print("Column " .. user_cmd.args .. " already hidden")
-                return
-            end
-        end
-    end
-
-    util.extend_table(hidden_columns, cols)
-
-    draw_data(header, csv.get_entries())
-
-    if cursor_main ~= nil then vim.api.nvim_win_set_cursor(win_main, cursor_main) end
-    if cursor_jl ~= nil then vim.api.nvim_win_set_cursor(win_jl, cursor_jl) end
-
-    print("Hid column(s) " .. user_cmd.args)
+    csv.hide_columns(fields)
 end
 
 local function show_column(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
-    local win_main = vim.fn.bufwinid(main_buf)
-    local win_jl = vim.fn.bufwinid(jl.get_buffer())
-
-    local cursor_main
-    local cursor_jl
-    if win_main ~= -1 then cursor_main = vim.api.nvim_win_get_cursor(win_main) end
-    if win_jl ~= -1 then cursor_jl = vim.api.nvim_win_get_cursor(win_jl) end
-
-    local cols = {}
-    for _, field in ipairs(fields) do
-        if index[field] == nil then
-            print("Invalid Column " .. field)
-        else
-            table.insert(cols, index[field])
-        end
-    end
-
-    if #cols == 0 then return end
-
-    local i = 1
-    while i <= #hidden_columns do
-        for _, col in ipairs(cols) do
-            if hidden_columns[i] == col then
-                table.remove(hidden_columns, i)
-            end
-        end
-        i = i + 1
-    end
-
-    draw_data(header, csv.get_entries())
-
-    if cursor_main ~= nil then vim.api.nvim_win_set_cursor(win_main, cursor_main) end
-    if cursor_jl ~= nil then vim.api.nvim_win_set_cursor(win_jl, cursor_jl) end
-
-    print("Showed column(s) " .. user_cmd.args)
+    csv.show_columns(fields)
 end
 
 local function hide_entry(user_cmd)
     local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
     if eval == nil then return end
-    local entries = csv.get_entries()
-
-    local amount = 0
-    for i = #entries, 1, -1 do
-        if not entries[i].hidden then
-            if eval.evaluate(entries[i]) then
-                entries[i].hidden = true
-                table.insert(hidden_entries, entries[i])
-                local line = entries[i].locations[main_buf]
-                util.buf_temp_modifiable(main_buf, function() vim.api.nvim_buf_set_lines(main_buf, line, line + 1, true, {}) end)
-                entries[i].locations[main_buf] = "hidden"
-                amount = amount + 1
-            end
-        end
-    end
-
-    table.sort(hidden_entries, function (a, b)
-        return a.index < b.index
-    end)
-
-    csv.fix_line_nrs()
-    print(amount .. " Entries hidden")
+    csv.hide_entries_by_filter(eval)
 end
 
 local function show_entry(user_cmd)
     local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
     if eval == nil then return end
-
-    local amount = 0
-    for _, obj in ipairs(hidden_entries) do
-        if eval.evaluate(obj) then
-            obj.hidden = false
-            amount = amount + 1
-        end
-    end
-
-    csv.fix_line_nrs()
-
-    local i = 1
-    while i <= #hidden_entries do
-        if hidden_entries[i].hidden == false then
-            local line = hidden_entries[i].locations[main_buf]
-            util.buf_temp_modifiable(main_buf, function()
-                vim.api.nvim_buf_set_lines(main_buf, line, line, true, { csv.create_line(hidden_entries[i].fields, config.spacing, hidden_columns) })
-            end)
-            if hidden_entries[i].highlight.group ~= nil then
-                hl.add(hidden_entries[i], hidden_entries[i].highlight.group)
-            end
-            table.remove(hidden_entries, i)
-            i = i - 1
-        end
-        i = i + 1
-    end
-
-    print(amount .. " Entries shown")
+    csv.show_entries_by_filter(eval)
 end
 
 local function jumplist_remove(user_cmd)
@@ -368,29 +252,40 @@ function M.jumplist_go()
     })
 end
 
+local function parse()
+    og_buf = vim.api.nvim_get_current_buf()
+    local buf = vim.api.nvim_buf_get_lines(og_buf, 0, -1, true)
+
+    header = util.split_string(buf[1], ";")
+
+    for i, field in ipairs(header) do
+        index[field] = i
+    end
+
+    table.remove(buf, 1)
+    return buf
+end
+
 function M.analyser_start()
     if not setup_called then
         print("csv-analyser.setup() must be called before usage")
         return
     end
 
-    if main_buf ~= nil then return end
+    if analyser_started then return end
 
-    M.parse()
+    local csv_content = parse()
 
-    main_buf = vim.api.nvim_create_buf(false, true)
+
+    hl.setup(config.colors)
+    csv.setup({ header = header, spacing = config.spacing })
 
     jl.setup({ position = config.jumplist_position })
-    hl.setup(config.colors)
-    vim.api.nvim_win_set_hl_ns(0, hl.get_namespace())
-
-    vim.api.nvim_buf_set_name(main_buf, "CSV")
-    vim.api.nvim_set_option_value("modifiable", false, { buf = main_buf })
-
-    vim.api.nvim_win_set_buf(0, main_buf)
+    main.setup({ header = header })
+    main_buf = main.get_buffer()
 
     vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<leader>j", '', { callback=jl.toggle })
-    vim.api.nvim_buf_set_keymap(main_buf, "n", "<leader>j", '', { callback=jl.open })
+    vim.api.nvim_buf_set_keymap(main.get_buffer(), "n", "<leader>j", '', { callback=jl.open })
     vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<CR>", '', {
         noremap=true,
         callback=M.jumplist_go
@@ -398,7 +293,9 @@ function M.analyser_start()
 
     create_data_objs(csv_content, header)
 
-    draw_data(header, csv.get_entries())
+    --draw_data(header, csv.get_entries())
+    main.draw()
+
     vim.api.nvim_create_user_command("CsvHide", hide_entry, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvShow", show_entry, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvHideCol", hide_column, { nargs = '?' })
@@ -430,25 +327,9 @@ function M.analyser_stop()
         index = {}
         hidden_entries = {}
         hidden_columns = {}
-        csv_content = nil
         og_buf = nil
         main_buf = nil
     end
-end
-
-function M.parse()
-    og_buf = vim.api.nvim_get_current_buf()
-    local buf = vim.api.nvim_buf_get_lines(og_buf, 0, -1, true)
-
-    header = util.split_string(buf[1], ";")
-
-    for i, field in ipairs(header) do
-        index[field] = i
-    end
-
-    table.remove(buf, 1)
-
-    csv_content = buf
 end
 
 return M

@@ -37,6 +37,14 @@ function M.extend_table(tbl1, tbl2)
     end
 end
 
+function M.table_contains(tbl, val)
+    for key, tbl_val in pairs(tbl) do
+        if tbl_val == val then return key end
+    end
+
+    return false
+end
+
 function M.array_contains(tbl, val)
     for key, tbl_val in ipairs(tbl) do
         if tbl_val == val then return key end
@@ -51,6 +59,13 @@ function M.array_contains_key(tbl, key)
     end
 
     return false
+end
+
+function M.array_remove_by_val(tbl, val)
+    for i, tbl_val in ipairs(tbl) do
+        if tbl_val == val then tbl[i] = nil end
+    end
+    M.array_reindex(tbl)
 end
 
 function M.array_reindex(tbl)
