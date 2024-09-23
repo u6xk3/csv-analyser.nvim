@@ -1,7 +1,4 @@
-local color = require("csv-analyser.color")
 local el = require("csv-analyser.entry-list")
-local filter = require("csv-analyser.filter")
-local hl = require("csv-analyser.highlight")
 local util = require("csv-analyser.util")
 
 local M = {}

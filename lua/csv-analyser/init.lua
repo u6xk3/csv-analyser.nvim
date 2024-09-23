@@ -1,6 +1,5 @@
 local util = require("csv-analyser.util")
 local filter = require("csv-analyser.filter")
-local color_util = require("csv-analyser.color")
 local jl = require("csv-analyser.windows.jumplist")
 local main = require("csv-analyser.windows.main")
 local hl = require("csv-analyser.highlight")
@@ -10,8 +9,6 @@ local M = {}
 
 local header
 local index = {}
-local hidden_entries = {}
-local hidden_columns = {}
 local og_buf
 local main_buf
 local config
@@ -34,14 +31,6 @@ local default_config = {
     spacing = "  ",
 }
 
-local function get_entry_by_line_nr(data, buf, line_nr)
-    for _, entry in ipairs(data) do
-        if not entry.hidden and entry.locations[buf] == line_nr then
-            return entry
-        end
-    end
-end
-
 local function create_data_objs(lines, header_row)
     for nr, line in ipairs(lines) do
         local fields = util.split_string(line, ";")
@@ -58,19 +47,6 @@ local function create_data_objs(lines, header_row)
         end
         csv.create_entry(line, nr, values)
     end
-end
-
-local function get_buffers_from_data(data)
-    local buffers = {}
-    for _, obj in ipairs(data) do
-        if not obj.hidden then
-            for buf, _ in pairs(obj.locations) do
-                if buffers[buf] == nil then buffers[buf] = {} end
-                table.insert(buffers[buf], csv.create_line(obj.fields, config.spacing, hidden_columns))
-            end
-        end
-    end
-    return buffers
 end
 
 local function remove_highlight(user_cmd)
@@ -211,8 +187,6 @@ function M.analyser_stop()
 
         header = nil
         index = {}
-        hidden_entries = {}
-        hidden_columns = {}
         og_buf = nil
         main_buf = nil
     end
