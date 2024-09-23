@@ -31,34 +31,37 @@ function M.setup(colors)
     create_hl_groups()
 end
 
-function M.buf_reapply(buf)
-    if highlights[buf] == nil then return end
-    for line, hl in pairs(highlights[buf]) do
-        M.add(buf, line, hl.hl_group)
+function M.win_reapply(win)
+    if highlights[win] == nil then return end
+    for entry, hl in pairs(highlights[win]) do
+        M.add(win, entry, hl.hl_group)
     end
 end
 
-function M.add(buf, line, hl_group)
-    if highlights[buf] == nil then highlights[buf] = {} end
+function M.add(win, entry, hl_group)
+    if highlights[win] == nil then highlights[win] = {} end
 
-    if highlights[buf][line] ~= nil then
-        vim.api.nvim_buf_del_extmark(buf, ns, highlights[buf][line].id)
+    if highlights[win][entry] ~= nil then
+        vim.api.nvim_buf_del_extmark(win.get_buffer(), ns, highlights[win][entry].id)
     end
 
-    local id = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
-        end_col = util.buf_get_line_length(buf, line),
+    local line = win.get_line_by_entry(entry)
+    if line == false then return end
+
+    local id = vim.api.nvim_buf_set_extmark(win.get_buffer(), ns, line, 0, {
+        end_col = util.buf_get_line_length(win.get_buffer(), line),
         hl_group = hl_group
     })
 
-    highlights[buf][line] = highlight.create(id, hl_group)
+    highlights[win][entry] = highlight.create(id, hl_group)
 end
 
-function M.remove(buf, line)
-    if highlights[buf] == nil then return end
+function M.remove(win, entry)
+    if highlights[win] == nil then return end
 
-    if highlights[buf][line] ~= nil then
-        vim.api.nvim_buf_del_extmark(buf, ns, highlights[buf][line].id)
-        highlights[buf][line] = nil
+    if highlights[win][entry] ~= nil then
+        vim.api.nvim_buf_del_extmark(win.get_buffer(), ns, highlights[win][entry].id)
+        highlights[win][entry] = nil
     end
 end
 

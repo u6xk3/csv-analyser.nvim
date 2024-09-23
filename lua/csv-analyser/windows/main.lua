@@ -18,7 +18,7 @@ local function csv_changed(topic, change)
                 util.buf_temp_modifiable(buffer, function()
                     vim.api.nvim_buf_set_lines(buffer, line, line, true, { csv.create_line(entry.fields, columns) })
                 end)
-                hl.buf_reapply(buffer)
+                hl.win_reapply(M)
             end
         else
             for i = #change.entries, 1, -1 do
@@ -47,9 +47,9 @@ local function csv_changed(topic, change)
             local line = el.contains(entries, entry)
             if line ~= false then
                 if change.hl_group == nil then
-                    hl.remove(buffer, line)
+                    hl.remove(M, entry)
                 else
-                    hl.add(buffer, line, change.hl_group)
+                    hl.add(M, entry, change.hl_group)
                 end
             end
         end
@@ -82,7 +82,7 @@ function M.draw()
     end)
 
     if cursor ~= nil then vim.api.nvim_win_set_cursor(win, cursor) end
-    hl.buf_reapply(buffer)
+    hl.win_reapply(M)
 end
 
 function M.get_line_by_entry(entry)
