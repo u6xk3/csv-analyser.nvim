@@ -4,7 +4,8 @@ local el = require("csv-analyser.entry-list")
 local M = {}
 
 local entries = {}
-local hidden_entries = {}
+local entry_is_hidden = {}
+local entry_has_highlight = {}
 local hidden_columns = {}
 local listeners = {}
 local config
@@ -39,12 +40,8 @@ function M.add_csv_change_listener(callback, topics)
     })
 end
 
-function M.create_entry(buf, line, line_nr, fields)
-    local locations = {}
-    locations[buf] = line_nr
-
+function M.create_entry(line, line_nr, fields)
     local entry = {
-        locations = locations,
         line = line,
         hidden = false,
         fields = fields,
@@ -124,9 +121,9 @@ end
 function M.hide_entries_by_filter(filter)
     local valid_entries = {}
     for _, entry in ipairs(entries) do
-        if filter.evaluate(entry) and el.contains(hidden_entries, entry) == false then
+        if filter.evaluate(entry) and entry_is_hidden[entry] == nil then
             table.insert(valid_entries, entry)
-            table.insert(hidden_entries, entry)
+            entry_is_hidden[entry] = true
         end
     end
 
@@ -139,19 +136,22 @@ end
 
 function M.show_entries_by_filter(filter)
     local valid_entries = {}
-    for _, entry in ipairs(hidden_entries) do
+    for entry, _ in pairs(entry_is_hidden) do
         if filter.evaluate(entry) then
             table.insert(valid_entries, entry)
-            el.remove_no_reindex(hidden_entries, entry)
+            entry_is_hidden[entry] = nil
         end
     end
-    util.array_reindex(hidden_entries)
 
     print("Showing " .. #valid_entries .. " Lines")
     if #valid_entries > 0 then
         el.sort(valid_entries)
         notify_listeners("entries_hidden", { entries = valid_entries, hidden = false })
     end
+end
+
+function M.entry_is_hidden(entry)
+    return entry_is_hidden[entry]
 end
 
 function M.fix_line_nrs()

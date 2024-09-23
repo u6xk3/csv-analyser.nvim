@@ -37,12 +37,26 @@ function M.extend_table(tbl1, tbl2)
     end
 end
 
+function M.table_shallow_copy(tbl)
+    local tbl_cp = {}
+    for key, val in pairs(tbl) do
+        tbl_cp[key] = val
+    end
+    return tbl_cp
+end
+
 function M.table_contains(tbl, val)
     for key, tbl_val in pairs(tbl) do
         if tbl_val == val then return key end
     end
 
     return false
+end
+
+function M.array_extend(tbl, tbl2)
+    for _, val in ipairs(tbl2) do
+        tbl[#tbl+1] = val
+    end
 end
 
 function M.array_contains(tbl, val)
@@ -70,7 +84,15 @@ end
 
 function M.array_reindex(tbl)
     local adjusted_index = 1
-    local initial_length = #tbl
+    local initial_length = 0
+    for i, _ in pairs(tbl) do
+        if type(i) == "number" then
+            if i > initial_length then
+                initial_length = i
+            end
+        end
+    end
+
     for index = 1, initial_length do
         if tbl[index] ~= nil then
             tbl[adjusted_index] = tbl[index]

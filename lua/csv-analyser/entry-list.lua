@@ -16,7 +16,8 @@ function M.sort(entry_list)
 end
 
 function M.insert(entry_list, entry)
-    if M.contains(entry_list, entry) ~= false then return end
+    local contains = M.contains(entry_list, entry)
+    if contains ~= false then return contains end
 
     if #entry_list == 0 then
         table.insert(entry_list, 1, entry)
@@ -28,7 +29,7 @@ function M.insert(entry_list, entry)
         return 1
     elseif entry.index > entry_list[#entry_list].index then
         table.insert(entry_list, #entry_list + 1, entry)
-        return #entry_list + 1
+        return #entry_list
     end
 
     for i = 1, #entry_list do

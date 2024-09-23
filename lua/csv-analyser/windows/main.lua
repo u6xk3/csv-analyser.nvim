@@ -15,11 +15,9 @@ local function csv_changed(topic, change)
         if change.hidden == false then
             for _, entry in ipairs(change.entries) do
                 local line = el.insert(entries, entry)
-                if line ~= nil then
-                    util.buf_temp_modifiable(buffer, function()
-                        vim.api.nvim_buf_set_lines(buffer, line, line, true, { csv.create_line(entry.fields, columns) })
-                    end)
-                end
+                util.buf_temp_modifiable(buffer, function()
+                    vim.api.nvim_buf_set_lines(buffer, line, line, true, { csv.create_line(entry.fields, columns) })
+                end)
             end
         else
             for i = #change.entries, 1, -1 do
@@ -35,7 +33,7 @@ local function csv_changed(topic, change)
 
     elseif topic == "columns_hidden" then
         if change.hidden == false then
-            util.extend_table(columns, change.columns)
+            util.array_extend(columns, change.columns)
         else
             for _, col in ipairs(change.columns) do
                 util.array_remove_by_val(columns, col)
@@ -57,8 +55,8 @@ function M.setup(conf)
     vim.api.nvim_win_set_buf(0, buffer)
 
     csv.add_csv_change_listener(csv_changed, { "columns_hidden", "entries_hidden", "highlights" })
-    entries = csv.get_entries()
-    columns = config.header
+    entries = util.table_shallow_copy(csv.get_entries())
+    columns = { unpack(config.header) }
 end
 
 function M.draw()
@@ -68,11 +66,15 @@ function M.draw()
 
     local content = csv.create_buffer_content(entries, columns)
     util.buf_temp_modifiable(buffer, function()
-        vim.api.nvim_buf_set_lines(buffer, 0, -1, true, { table.concat(columns, csv.get_spacing()) })
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, true, { csv.create_line(config.header, columns) })
         vim.api.nvim_buf_set_lines(buffer, -1, -1, true, content)
     end)
 
     if cursor ~= nil then vim.api.nvim_win_set_cursor(win, cursor) end
+end
+
+function M.get_line_by_entry(entry)
+    return el.contains(entries, entry)
 end
 
 function M.get_buffer()

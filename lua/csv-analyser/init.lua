@@ -56,7 +56,7 @@ local function create_data_objs(lines, header_row)
                 --values[header_row[i]] = table.concat(fields, config.spacing, i)
             end
         end
-        csv.create_entry(main_buf, line, nr, values)
+        csv.create_entry(line, nr, values)
     end
 end
 
@@ -106,14 +106,6 @@ local function add_highlight(user_cmd)
     end
 
     print(amount .. " Lines Colored")
-end
-
-local function draw_data(header_row, data)
-    for buf, buffer_content in pairs(get_buffers_from_data(data)) do
-        util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { csv.create_line(header_row, config.spacing, hidden_columns) }) end)
-        util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffer_content) end)
-    end
-    hl.reapply()
 end
 
 local function buf_draw_data(buf, header_row, data)
@@ -206,52 +198,6 @@ function M.setup(conf)
     setup_called = true
 end
 
-local previous_id = nil
-function M.jumplist_go()
-    local win = vim.api.nvim_get_current_win()
-    local row = vim.api.nvim_win_get_cursor(win)[1]
-    local ns = hl.get_namespace()
-
-    if previous_id ~= nil then
-        vim.api.nvim_buf_del_extmark(main_buf, ns, previous_id)
-    end
-
-    local entry = jl.get_entries()[row - 1]
-    if entry == nil then return end
-
-    win = vim.fn.bufwinid(main_buf)
-    if win == -1 then return end
-
-    if entry.hidden then
-        print("This Entry was hidden in the mean time")
-        return
-    end
-
-    if entry.highlight.group ~= nil then
-        local current_bg = vim.api.nvim_get_hl(ns, { name = entry.highlight.group, create = false } ).bg
-        local bg
-        if current_bg ~= nil then
-            bg = color_util.brighten(current_bg, 50)
-        else
-            bg = vim.api.nvim_get_hl(0, { name = "Visual", create = false }).bg
-        end
-        vim.api.nvim_set_hl(ns, "jump", { bg = bg })
-    else
-        vim.api.nvim_set_hl(ns, "jump", {
-            bg = vim.api.nvim_get_hl(0, {
-                name = "Visual",
-                create = false }).bg
-        })
-    end
-
-    vim.api.nvim_win_set_cursor(win, { entry.locations[main_buf] + 1, 0 })
-    previous_id = vim.api.nvim_buf_set_extmark(main_buf, ns, entry.locations[main_buf], 0, {
-        end_col = util.buf_get_line_length(main_buf, entry.locations[main_buf]),
-        hl_group = "jump",
-        strict = false
-    })
-end
-
 local function parse()
     og_buf = vim.api.nvim_get_current_buf()
     local buf = vim.api.nvim_buf_get_lines(og_buf, 0, -1, true)
@@ -273,28 +219,26 @@ function M.analyser_start()
     end
 
     if analyser_started then return end
+    analyser_started = true
 
     local csv_content = parse()
 
 
     hl.setup(config.colors)
     csv.setup({ header = header, spacing = config.spacing })
+    create_data_objs(csv_content, header)
 
-    jl.setup({ position = config.jumplist_position })
+
+    jl.setup({ position = config.jumplist_position, header = header })
     main.setup({ header = header })
     main_buf = main.get_buffer()
 
     vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<leader>j", '', { callback=jl.toggle })
     vim.api.nvim_buf_set_keymap(main.get_buffer(), "n", "<leader>j", '', { callback=jl.open })
-    vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<CR>", '', {
-        noremap=true,
-        callback=M.jumplist_go
-    })
-
-    create_data_objs(csv_content, header)
 
     --draw_data(header, csv.get_entries())
     main.draw()
+    jl.draw()
 
     vim.api.nvim_create_user_command("CsvHide", hide_entry, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvShow", show_entry, { nargs = '?' })
@@ -302,12 +246,11 @@ function M.analyser_start()
     vim.api.nvim_create_user_command("CsvShowCol", show_column, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvColor", add_highlight, { nargs = '?' })
     vim.api.nvim_create_user_command("CsvClear", remove_highlight, { nargs = '?' })
-    vim.api.nvim_create_user_command("CsvAdd", jumplist_add, { nargs = '?' })
-    vim.api.nvim_create_user_command("CsvRemove", jumplist_remove, { nargs = '?' })
 end
 
 function M.analyser_stop()
-    if main_buf ~= nil then
+    if analyser_started then
+        analyser_started = false
         jl.close()
         jl.clear()
 
