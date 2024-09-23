@@ -4,7 +4,12 @@ local M = {}
 
 local ns
 local hl_groups
-local entries = {}
+local highlights = {}
+
+local highlight = {}
+function highlight.create(id, hl_group)
+    return { id = id, hl_group = hl_group }
+end
 
 local function create_hl_groups()
     for key, group in pairs(hl_groups) do
@@ -26,83 +31,35 @@ function M.setup(colors)
     create_hl_groups()
 end
 
-function M.reapply()
-    for _, entry in ipairs(entries) do
-        M.add(entry, entry.highlight.group)
-    end
-end
-
 function M.buf_reapply(buf)
-    for _, entry in ipairs(entries) do
-        M.buf_add(buf, entry, entry.highlight.group)
+    if highlights[buf] == nil then return end
+    for line, hl in pairs(highlights[buf]) do
+        M.add(buf, line, hl.hl_group)
     end
 end
 
-function M.add(entry, hl_group)
-    for buf, line in pairs(entry.locations) do
-        if entry.highlight.ids[buf] ~= nil then
-            vim.api.nvim_buf_del_extmark(buf, ns, entry.highlight.ids[buf])
-        end
-        entry.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, { end_col = util.buf_get_line_length(buf, line), hl_group = hl_group, strict = true })
-    end
-    entry.highlight.group = hl_group
+function M.add(buf, line, hl_group)
+    if highlights[buf] == nil then highlights[buf] = {} end
 
-    for _, existing in ipairs(entries) do
-        if existing.index == entry.index then return end
+    if highlights[buf][line] ~= nil then
+        vim.api.nvim_buf_del_extmark(buf, ns, highlights[buf][line].id)
     end
 
-    table.insert(entries, entry)
+    local id = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
+        end_col = util.buf_get_line_length(buf, line),
+        hl_group = hl_group
+    })
+
+    highlights[buf][line] = highlight.create(id, hl_group)
 end
 
-function M.buf_add(buf, entry, hl_group)
-    local line = entry.locations[buf]
-    if line == nil then return end
+function M.remove(buf, line)
+    if highlights[buf] == nil then return end
 
-    if entry.highlight.ids[buf] ~= nil then
-        vim.api.nvim_buf_del_extmark(buf, ns, entry.highlight.ids[buf])
+    if highlights[buf][line] ~= nil then
+        vim.api.nvim_buf_del_extmark(buf, ns, highlights[buf][line].id)
+        highlights[buf][line] = nil
     end
-    entry.highlight.ids[buf] = vim.api.nvim_buf_set_extmark(buf, ns, line, 0, { end_col = util.buf_get_line_length(buf, line), hl_group = hl_group, strict = true })
-    entry.highlight.group = hl_group
-
-    for _, existing in ipairs(entries) do
-        if existing.index == entry.index then return end
-    end
-
-    table.insert(entries, entry)
-end
-
-function M.remove_by_filter(filter)
-    local nr = 0
-    for i, entry in ipairs(entries) do
-        if filter.evaluate(entry) then
-            for buf, id in pairs(entry.highlight.ids) do
-                vim.api.nvim_buf_del_extmark(buf, ns, id)
-                entry.highlight.ids[buf] = nil
-                nr = nr + 1
-            end
-            entry.highlight.group = nil
-            entries[i] = nil
-        end
-    end
-    util.array_reindex(entries)
-
-    return nr
-end
-
-function M.remove(entry)
-    for buf, id in pairs(entry.highlight.ids) do
-        vim.api.nvim_buf_del_extmark(buf, ns, id)
-        entry.highlight.ids[buf] = nil
-    end
-    entry.highlight.group = nil
-
-    for i = 1, #entries do
-        if entries[i].index == entry.index then
-            entries[i] = nil
-        end
-    end
-
-    util.array_reindex(entries)
 end
 
 function M.check_hl_group(group)

@@ -79,16 +79,14 @@ local function remove_highlight(user_cmd)
     local eval = filter.parse_args(fields)
     if eval == nil then return end
 
-    local amount = hl.remove_by_filter(eval)
-
-    print(amount .. " Lines Cleared")
+    csv.remove_highlight_by_filter(eval)
 end
 
 local function add_highlight(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
-    local color = hl.check_hl_group(fields[#fields])
+    local hl_group = hl.check_hl_group(fields[#fields])
 
-    if color == nil then
+    if hl_group == nil then
         print("Invalid color, last argument must be color")
         return
     end
@@ -97,27 +95,8 @@ local function add_highlight(user_cmd)
     local eval = filter.parse_args(fields)
     if eval == nil then return end
 
-    local amount = 0
-    for _, obj in ipairs(csv.get_entries()) do
-        if not obj.hidden and eval.evaluate(obj) then
-            hl.add(obj, color)
-            amount = amount + 1
-        end
-    end
-
-    print(amount .. " Lines Colored")
+    csv.add_highlight_by_filter(eval, hl_group)
 end
-
-local function buf_draw_data(buf, header_row, data)
-    local buffers = get_buffers_from_data(data)
-    if buffers[buf] == nil then return false end
-
-    util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, 0, -1, true, { csv.create_line(header_row, config.spacing, hidden_columns) }) end)
-    util.buf_temp_modifiable(buf, function () vim.api.nvim_buf_set_lines(buf, -1, -1, true, buffers[buf]) end)
-
-    hl.buf_reapply(buf)
-end
-
 
 local function hide_column(user_cmd)
     local fields = util.split_string(user_cmd.args, " ")
@@ -139,42 +118,6 @@ local function show_entry(user_cmd)
     local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
     if eval == nil then return end
     csv.show_entries_by_filter(eval)
-end
-
-local function jumplist_remove(user_cmd)
-    local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
-    if eval == nil then return end
-
-    local lines = jl.remove_entries(eval)
-    for i = #lines, 1, -1 do
-        util.buf_temp_modifiable(jl.get_buffer(), function()
-            vim.api.nvim_buf_set_lines(jl.get_buffer(), lines[i], lines[i] + 1, true, {})
-        end)
-    end
-
-    csv.buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
-
-    print(#lines .. " Lines removed from the jumplist")
-end
-
-local function jumplist_add(user_cmd)
-    local eval = filter.parse_args(util.split_string(user_cmd.args, " "))
-    if eval == nil then return end
-
-    local amount = 0
-    for _, entry in ipairs(csv.get_entries()) do
-        if not entry.hidden and not jl.contains_entry(entry) then
-            if eval.evaluate(entry) then
-                jl.add_entry(entry)
-                amount = amount + 1
-            end
-        end
-    end
-
-    csv.buf_fix_line_nrs(jl.get_buffer(), jl.get_entries())
-
-    buf_draw_data(jl.get_buffer(), header, jl.get_entries())
-    print(amount .. " Lines added to the jumplist")
 end
 
 function M.setup(conf)

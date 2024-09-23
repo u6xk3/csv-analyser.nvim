@@ -25,6 +25,7 @@ local function csv_changed(topic, change)
                     end)
                 end
             end
+            hl.buf_reapply(buffer)
         else
             for i = #change.entries, 1, -1 do
                 local line = el.remove_no_reindex(entries, change.entries[i])
@@ -46,6 +47,16 @@ local function csv_changed(topic, change)
         end
         M.draw()
     elseif topic == "highlights" then
+        for _, entry in ipairs(change.entries) do
+            local line = el.contains(entries, entry)
+            if line ~= false then
+                if change.hl_group == nil then
+                    hl.remove(buffer, line)
+                else
+                    hl.add(buffer, line, change.hl_group)
+                end
+            end
+        end
     end
 end
 
@@ -80,6 +91,7 @@ function M.draw()
     end)
 
     if cursor ~= nil then vim.api.nvim_win_set_cursor(win, cursor) end
+    hl.buf_reapply(buffer)
 end
 
 local previous_jump = nil
@@ -167,6 +179,11 @@ function M.add_entry(entry)
         util.buf_temp_modifiable(buffer, function()
             vim.api.nvim_buf_set_lines(buffer, line, line, true, { csv.create_line(entry.fields, columns) })
         end)
+
+        local hl_group = csv.entry_get_hl_group(entry)
+        if hl_group ~= nil then
+            hl.add(buffer, line, hl_group)
+        end
     end
 end
 
@@ -185,6 +202,11 @@ function M.add_entries(user_cmd)
                 util.buf_temp_modifiable(buffer, function()
                     vim.api.nvim_buf_set_lines(buffer, line, line, true, { csv.create_line(entry.fields, columns) })
                 end)
+
+                local hl_group = csv.entry_get_hl_group(entry)
+                if hl_group ~= nil then
+                    hl.add(buffer, line, hl_group)
+                end
             end
         end
     end

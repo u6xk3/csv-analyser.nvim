@@ -1,11 +1,14 @@
-local util = require("csv-analyser.util")
+local color = require("csv-analyser.color")
 local el = require("csv-analyser.entry-list")
+local filter = require("csv-analyser.filter")
+local hl = require("csv-analyser.highlight")
+local util = require("csv-analyser.util")
 
 local M = {}
 
 local entries = {}
 local entry_is_hidden = {}
-local entry_has_highlight = {}
+local hl_group_by_entry = {}
 local hidden_columns = {}
 local listeners = {}
 local config
@@ -150,8 +153,46 @@ function M.show_entries_by_filter(filter)
     end
 end
 
+function M.add_highlight_by_filter(condition, hl_group)
+    local valid_entries = {}
+    for _, entry in ipairs(entries) do
+        if hl_group_by_entry[entry] == nil and condition.evaluate(entry) then
+            table.insert(valid_entries, entry)
+            hl_group_by_entry[entry] = hl_group
+        end
+    end
+
+    notify_listeners("highlights", {
+        entries = valid_entries,
+        hl_group = hl_group
+    })
+
+    print(#valid_entries .. " Lines Colored")
+end
+
+function M.remove_highlight_by_filter(condition)
+    local valid_entries = {}
+    for _, entry in ipairs(entries) do
+        if hl_group_by_entry[entry] ~= nil and condition.evaluate(entry) then
+            table.insert(valid_entries, entry)
+            hl_group_by_entry[entry] = nil
+        end
+    end
+
+    notify_listeners("highlights", {
+        entries = valid_entries,
+        hl_group = nil
+    })
+
+    print(#valid_entries .. " Lines Cleared")
+end
+
 function M.entry_is_hidden(entry)
     return entry_is_hidden[entry]
+end
+
+function M.entry_get_hl_group(entry)
+    return hl_group_by_entry[entry]
 end
 
 function M.fix_line_nrs()
