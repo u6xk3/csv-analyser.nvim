@@ -221,6 +221,10 @@ function M.get_spacing()
     return config.spacing
 end
 
+function M.get_header()
+    return config.header
+end
+
 function M.get_entries()
     return entries
 end

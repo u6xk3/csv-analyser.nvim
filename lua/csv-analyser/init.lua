@@ -1,6 +1,7 @@
 local util = require("csv-analyser.util")
 local filter = require("csv-analyser.filter")
 local jl = require("csv-analyser.windows.jumplist")
+local lv = require("csv-analyser.windows.lastvalue")
 local main = require("csv-analyser.windows.main")
 local hl = require("csv-analyser.highlight")
 local csv = require("csv-analyser.csv")
@@ -109,11 +110,6 @@ function M.setup(conf)
         config = default_config
     end
 
-    filter.setup({
-        filters = config.filters,
-        index = index
-    })
-
     setup_called = true
 end
 
@@ -142,6 +138,10 @@ function M.analyser_start()
 
     local csv_content = parse()
 
+    filter.setup({
+        filters = config.filters,
+        index = index
+    })
 
     hl.setup(config.colors)
     csv.setup({ header = header, spacing = config.spacing })
@@ -150,10 +150,13 @@ function M.analyser_start()
 
     jl.setup({ position = config.jumplist_position, header = header })
     main.setup({ header = header })
+    lv.setup()
     main_buf = main.get_buffer()
 
     vim.api.nvim_buf_set_keymap(jl.get_buffer(), "n", "<leader>j", '', { callback=jl.toggle })
     vim.api.nvim_buf_set_keymap(main.get_buffer(), "n", "<leader>j", '', { callback=jl.open })
+
+    vim.api.nvim_set_keymap("n", "<leader>l", '', { callback=lv.toggle })
 
     --draw_data(header, csv.get_entries())
     main.draw()

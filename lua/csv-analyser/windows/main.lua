@@ -89,6 +89,10 @@ function M.get_line_by_entry(entry)
     return el.contains(entries, entry)
 end
 
+function M.get_entries()
+    return entries
+end
+
 function M.get_buffer()
     return buffer
 end
