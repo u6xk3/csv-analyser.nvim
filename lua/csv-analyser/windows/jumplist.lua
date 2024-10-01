@@ -220,7 +220,7 @@ function M.remove_entries(user_cmd)
 
     local valid_entries = {}
 
-    for entry, _ in pairs(entry_added) do
+    for _, entry in ipairs(entries) do
         if condition.evaluate(entry) then
             entry_added[entry] = nil
             el.insert(valid_entries, entry)
@@ -241,9 +241,11 @@ end
 function M.remove_entry(entry)
     entry_added[entry] = nil
     local line = el.remove(entries, entry)
-    util.buf_temp_modifiable(buffer, function()
-        vim.api.nvim_buf_set_lines(buffer, line, line + 1, true, { csv.create_line(entry.fields, columns) })
-    end)
+    if line ~= nil then
+        util.buf_temp_modifiable(buffer, function()
+            vim.api.nvim_buf_set_lines(buffer, line, line + 1, true, { csv.create_line(entry.fields, columns) })
+        end)
+    end
 end
 
 function M.get_buffer()
