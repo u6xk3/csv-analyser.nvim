@@ -11,7 +11,7 @@ local buffer
 local values = {}
 local csv_entries
 local config
-local augroup
+local clipboard
 
 local function update_lastvalues()
     local main_win = vim.fn.bufwinid(main.get_buffer())
@@ -30,7 +30,7 @@ local function update_lastvalues()
         csv_index = el.contains(csv_entries, entry)
     end
 
-    for line, value in ipairs(values) do
+    for line, value in pairs(values) do
         for i = csv_index, 1, -1 do
             if value.condition.evaluate(csv_entries[i]) then
                 value.entry = csv_entries[i]
@@ -42,22 +42,56 @@ local function update_lastvalues()
         local txt
         if value.entry ~= nil then
             txt = csv.create_line(value.entry.fields, value.columns)
-            vim.api.nvim_buf_set_lines(buffer, line - 1, line, true, { txt })
+            vim.api.nvim_buf_set_lines(buffer, line - 1, line, false, { txt })
             local hl_group = csv.entry_get_hl_group(value.entry)
             if hl_group ~= nil then
                 hl.add(M, value.entry, hl_group)
             end
         else
             txt = "NOT FOUND"
-            vim.api.nvim_buf_set_lines(buffer, line - 1, line, true, { txt })
+            vim.api.nvim_buf_set_lines(buffer, line - 1, line, false, { txt })
         end
+    end
+end
+
+local function Paste()
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    if clipboard ~= nil then
+        table.insert(values, row, clipboard)
+        update_lastvalues()
+    else
+        local to_paste
+        vim.fn.getreg("", to_paste)
+        vim.api.nvim_buf_set_lines(buffer, row, row, true, { to_paste })
+    end
+end
+
+local function paste()
+    local row = vim.api.nvim_win_get_cursor(0)[1] + 1
+    if clipboard ~= nil then
+        table.insert(values, row, clipboard)
+        update_lastvalues()
+    else
+        local to_paste
+        vim.fn.getreg("", to_paste)
+        vim.api.nvim_buf_set_lines(buffer, row, row, true, { to_paste })
+    end
+end
+
+local function copy()
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    clipboard = values[row]
+    if clipboard == nil then
+        vim.fn.setreg("", vim.api.nvim_buf_get_lines(buffer, row, row + 1, true))
     end
 end
 
 local function remove()
     local row  = vim.api.nvim_win_get_cursor(0)[1]
+    copy()
     vim.api.nvim_buf_set_lines(buffer, row - 1, row, true, {})
     values[row] = nil
+    util.array_reindex(values)
 end
 
 local function apply()
@@ -130,6 +164,10 @@ function M.setup(conf)
     vim.api.nvim_buf_set_keymap(buffer, "n", "<CR>", '', { noremap = true, callback = apply })
     vim.api.nvim_buf_set_keymap(buffer, "n", "e", '', { noremap = true, callback = edit })
     vim.api.nvim_buf_set_keymap(buffer, "n", "dd", '', { noremap = true, callback = remove })
+    vim.api.nvim_buf_set_keymap(buffer, "n", "yy", '', { noremap = true, callback = copy })
+    vim.api.nvim_buf_set_keymap(buffer, "n", "p", '', { noremap = true, callback = paste })
+    vim.api.nvim_buf_set_keymap(buffer, "n", "P", '', { noremap = true, callback = Paste })
+    vim.api.nvim_buf_set_keymap(buffer, "n", "u", '', { noremap = true })
 
     --augroup = vim.api.nvim_create_augroup("lastvalue" ,{})
 end
